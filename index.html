@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Budget Tracker</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding-bottom: 20px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 0 16px;
+        }
+
+        /* Auth Screens */
+        .auth-screen {
+            display: none;
+            min-height: 100vh;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .auth-screen.active {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .auth-box {
+            background: white;
+            padding: 32px 24px;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        }
+
+        .auth-box h1 {
+            color: #333;
+            margin-bottom: 24px;
+            text-align: center;
+            font-size: 28px;
+        }
+
+        .input-group {
+            margin-bottom: 16px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 6px;
+            color: #555;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+            margin-bottom: 12px;
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+            background: #5568d3;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+
+        .btn-secondary:active {
+            background: #f0f2ff;
+        }
+
+        /* Main App */
+        #app {
+            display: none;
+        }
+
+        #app.active {
+            display: block;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 16px;
+            margin-bottom: 16px;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 24px;
+        }
+
+        .lang-toggle {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .balance-card {
+            background: rgba(255,255,255,0.15);
+            padding: 16px;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+        }
+
+        .balance-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .balance-item:last-child {
+            margin-bottom: 0;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255,255,255,0.3);
+            font-weight: 600;
+            font-size: 18px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 16px;
+            font-size: 18px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .form-row.full {
+            grid-template-columns: 1fr;
+        }
+
+        select, input[type="text"], input[type="number"], input[type="date"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn-add {
+            width: 100%;
+            padding: 12px;
+            background: #10b981;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn-add:active {
+            background: #059669;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 12px;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .tab.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .entry {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .entry:last-child {
+            border-bottom: none;
+        }
+
+        .entry-info {
+            flex: 1;
+        }
+
+        .entry-category {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .entry-date {
+            font-size: 13px;
+            color: #999;
+        }
+
+        .entry-amount {
+            font-size: 18px;
+            font-weight: 600;
+            margin-right: 12px;
+        }
+
+        .entry-amount.income {
+            color: #10b981;
+        }
+
+        .entry-amount.expense {
+            color: #ef4444;
+        }
+
+        .btn-delete {
+            background: #fee;
+            color: #ef4444;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .btn-delete:active {
+            background: #fcc;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 16px;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #999;
+            padding: 40px 20px;
+        }
+
+        .btn-logout {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            margin-left: 8px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="auth-screen active">
+        <div class="container">
+            <div class="auth-box">
+                <h1 id="loginTitle">Giriş Yap</h1>
+                <div class="input-group">
+                    <label id="loginUsernameLabel">Kullanıcı Adı</label>
+                    <input type="text" id="loginUsername" />
+                </div>
+                <div class="input-group">
+                    <label id="loginPasswordLabel">Şifre</label>
+                    <input type="password" id="loginPassword" />
+                </div>
+                <button class="btn btn-primary" id="loginBtn">Giriş Yap</button>
+                <button class="btn btn-secondary" id="goToRegister">Kayıt Ol</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Register Screen -->
+    <div id="registerScreen" class="auth-screen">
+        <div class="container">
+            <div class="auth-box">
+                <h1 id="registerTitle">Kayıt Ol</h1>
+                <div class="input-group">
+                    <label id="registerUsernameLabel">Kullanıcı Adı</label>
+                    <input type="text" id="registerUsername" />
+                </div>
+                <div class="input-group">
+                    <label id="registerPasswordLabel">Şifre</label>
+                    <input type="password" id="registerPassword" />
+                </div>
+                <button class="btn btn-primary" id="registerBtn">Kayıt Ol</button>
+                <button class="btn btn-secondary" id="goToLogin">Giriş Yap</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="app">
+        <div class="header">
+            <div class="header-top">
+                <h1 id="appTitle">Bütçe Takip</h1>
+                <div>
+                    <button class="lang-toggle" id="langToggle">EN</button>
+                    <button class="btn-logout" id="logoutBtn">Çıkış</button>
+                </div>
+            </div>
+            <div class="balance-card">
+                <div class="balance-item">
+                    <span id="totalIncomeLabel">Toplam Gelir:</span>
+                    <span id="totalIncome">₺0</span>
+                </div>
+                <div class="balance-item">
+                    <span id="totalExpenseLabel">Toplam Gider:</span>
+                    <span id="totalExpense">₺0</span>
+                </div>
+                <div class="balance-item">
+                    <span id="remainingLabel">Kalan:</span>
+                    <span id="remaining">₺0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="card">
+                <h2 id="addEntryTitle">Yeni Kayıt Ekle</h2>
+                <div class="form-row">
+                    <select id="entryType">
+                        <option value="income">Gelir</option>
+                        <option value="expense">Gider</option>
+                    </select>
+                    <input type="number" id="entryAmount" placeholder="Miktar" />
+                </div>
+                <div class="form-row">
+                    <input type="text" id="entryCategory" placeholder="Kategori" />
+                    <input type="date" id="entryDate" />
+                </div>
+                <button class="btn-add" id="addEntryBtn">Ekle</button>
+            </div>
+
+            <div class="card">
+                <div class="tabs">
+                    <button class="tab active" data-tab="all" id="tabAll">Tümü</button>
+                    <button class="tab" data-tab="income" id="tabIncome">Gelir</button>
+                    <button class="tab" data-tab="expense" id="tabExpense">Gider</button>
+                </div>
+                <div id="entriesList"></div>
+            </div>
+
+            <div class="card">
+                <h2 id="chartTitle">Gider Dağılımı</h2>
+                <div class="chart-container">
+                    <canvas id="expenseChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Language dictionary
+        const lang = {
+            tr: {
+                loginTitle: 'Giriş Yap',
+                registerTitle: 'Kayıt Ol',
+                username: 'Kullanıcı Adı',
+                password: 'Şifre',
+                loginBtn: 'Giriş Yap',
+                registerBtn: 'Kayıt Ol',
+                appTitle: 'Bütçe Takip',
+                totalIncome: 'Toplam Gelir:',
+                totalExpense: 'Toplam Gider:',
+                remaining: 'Kalan:',
+                addEntry: 'Yeni Kayıt Ekle',
+                income: 'Gelir',
+                expense: 'Gider',
+                amount: 'Miktar',
+                category: 'Kategori',
+                addBtn: 'Ekle',
+                all: 'Tümü',
+                chartTitle: 'Gider Dağılımı',
+                deleteBtn: 'Sil',
+                logout: 'Çıkış',
+                emptyList: 'Henüz kayıt yok',
+                loginSuccess: 'Giriş başarılı!',
+                registerSuccess: 'Kayıt başarılı! Giriş yapabilirsiniz.',
+                loginError: 'Kullanıcı adı veya şifre hatalı',
+                userExists: 'Bu kullanıcı adı zaten mevcut'
+            },
+            en: {
+                loginTitle: 'Login',
+                registerTitle: 'Register',
+                username: 'Username',
+                password: 'Password',
+                loginBtn: 'Login',
+                registerBtn: 'Register',
+                appTitle: 'Budget Tracker',
+                totalIncome: 'Total Income:',
+                totalExpense: 'Total Expenses:',
+                remaining: 'Balance:',
+                addEntry: 'Add New Entry',
+                income: 'Income',
+                expense: 'Expense',
+                amount: 'Amount',
+                category: 'Category',
+                addBtn: 'Add',
+                all: 'All',
+                chartTitle: 'Expense Distribution',
+                deleteBtn: 'Delete',
+                logout: 'Logout',
+                emptyList: 'No entries yet',
+                loginSuccess: 'Login successful!',
+                registerSuccess: 'Registration successful! You can now login.',
+                loginError: 'Invalid username or password',
+                userExists: 'Username already exists'
+            }
+        };
+
+        let currentLang = 'tr';
+        let currentUser = null;
+        let entries = [];
+        let chart = null;
+        let currentFilter = 'all';
+
+        // Set today's date
+        document.getElementById('entryDate').valueAsDate = new Date();
+
+        // Auth functions
+        function getUsers() {
+            return JSON.parse(localStorage.getItem('users') || '{}');
+        }
+
+        function saveUsers(users) {
+            localStorage.setItem('users', JSON.stringify(users));
+        }
+
+        function register() {
+            const username = document.getElementById('registerUsername').value.trim();
+            const password = document.getElementById('registerPassword').value;
+            
+            if (!username || !password) return alert('Please fill all fields');
+            
+            const users = getUsers();
+            if (users[username]) {
+                alert(lang[currentLang].userExists);
+                return;
+            }
+            
+            users[username] = { password, entries: [] };
+            saveUsers(users);
+            alert(lang[currentLang].registerSuccess);
+            showLogin();
+        }
+
+        function login() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            
+            const users = getUsers();
+            if (users[username] && users[username].password === password) {
+                currentUser = username;
+                entries = users[username].entries || [];
+                showApp();
+                updateUI();
+            } else {
+                alert(lang[currentLang].loginError);
+            }
+        }
+
+        function logout() {
+            saveEntries();
+            currentUser = null;
+            entries = [];
+            showLogin();
+        }
+
+        function showLogin() {
+            document.getElementById('loginScreen').classList.add('active');
+            document.getElementById('registerScreen').classList.remove('active');
+            document.getElementById('app').classList.remove('active');
+        }
+
+        function showRegister() {
+            document.getElementById('loginScreen').classList.remove('active');
+            document.getElementById('registerScreen').classList.add('active');
+            document.getElementById('app').classList.remove('active');
+        }
+
+        function showApp() {
+            document.getElementById('loginScreen').classList.remove('active');
+            document.getElementById('registerScreen').classList.remove('active');
+            document.getElementById('app').classList.add('active');
+        }
+
+        // Data functions
+        function saveEntries() {
+            if (!currentUser) return;
+            const users = getUsers();
+            users[currentUser].entries = entries;
+            saveUsers(users);
+        }
+
+        function addEntry() {
+            const type = document.getElementById('entryType').value;
+            const amount = parseFloat(document.getElementById('entryAmount').value);
+            const category = document.getElementById('entryCategory').value.trim();
+            const date = document.getElementById('entryDate').value;
+            
+            if (!amount || !category || !date) return;
+            
+            entries.push({ id: Date.now(), type, amount, category, date });
+            saveEntries();
+            updateUI();
+            
+            // Clear form
+            document.getElementById('entryAmount').value = '';
+            document.getElementById('entryCategory').value = '';
+            document.getElementById('entryDate').valueAsDate = new Date();
+        }
+
+        function deleteEntry(id) {
+            entries = entries.filter(e => e.id !== id);
+            saveEntries();
+            updateUI();
+        }
+
+        function updateUI() {
+            // Calculate totals
+            const income = entries.filter(e => e.type === 'income').reduce((sum, e) => sum + e.amount, 0);
+            const expense = entries.filter(e => e.type === 'expense').reduce((sum, e) => sum + e.amount, 0);
+            const balance = income - expense;
+            
+            document.getElementById('totalIncome').textContent = `₺${income.toFixed(2)}`;
+            document.getElementById('totalExpense').textContent = `₺${expense.toFixed(2)}`;
+            document.getElementById('remaining').textContent = `₺${balance.toFixed(2)}`;
+            
+            // Update entries list
+            const filtered = currentFilter === 'all' ? entries : entries.filter(e => e.type === currentFilter);
+            const list = document.getElementById('entriesList');
+            
+            if (filtered.length === 0) {
+                list.innerHTML = `<div class="empty-state">${lang[currentLang].emptyList}</div>`;
+            } else {
+                list.innerHTML = filtered.map(e => `
+                    <div class="entry">
+                        <div class="entry-info">
+                            <div class="entry-category">${e.category}</div>
+                            <div class="entry-date">${e.date}</div>
+                        </div>
+                        <div class="entry-amount ${e.type}">₺${e.amount.toFixed(2)}</div>
+                        <button class="btn-delete" onclick="deleteEntry(${e.id})">${lang[currentLang].deleteBtn}</button>
+                    </div>
+                `).join('');
+            }
+            
+            // Update chart
+            updateChart();
+        }
+
+        function updateChart() {
+            const expenses = entries.filter(e => e.type === 'expense');
+            const categories = {};
+            
+            expenses.forEach(e => {
+                categories[e.category] = (categories[e.category] || 0) + e.amount;
+            });
+            
+            const labels = Object.keys(categories);
+            const data = Object.values(categories);
+            
+            if (chart) chart.destroy();
+            
+            if (labels.length === 0) {
+                return;
+            }
+            
+            const ctx = document.getElementById('expenseChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: [
+                            '#ef4444', '#f59e0b', '#10b981', '#3b82f6', 
+                            '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        function switchLang() {
+            currentLang = currentLang === 'tr' ? 'en' : 'tr';
+            document.getElementById('langToggle').textContent = currentLang === 'tr' ? 'EN' : 'TR';
+            
+            // Update all text
+            document.getElementById('loginTitle').textContent = lang[currentLang].loginTitle;
+            document.getElementById('registerTitle').textContent = lang[currentLang].registerTitle;
+            document.getElementById('loginUsernameLabel').textContent = lang[currentLang].username;
+            document.getElementById('loginPasswordLabel').textContent = lang[currentLang].password;
+            document.getElementById('registerUsernameLabel').textContent = lang[currentLang].username;
+            document.getElementById('registerPasswordLabel').textContent = lang[currentLang].password;
+            document.getElementById('loginBtn').textContent = lang[currentLang].loginBtn;
+            document.getElementById('registerBtn').textContent = lang[currentLang].registerBtn;
+            document.getElementById('goToRegister').textContent = lang[currentLang].registerBtn;
+            document.getElementById('goToLogin').textContent = lang[currentLang].loginBtn;
+            
+            document.getElementById('appTitle').textContent = lang[currentLang].appTitle;
+            document.getElementById('totalIncomeLabel').textContent = lang[currentLang].totalIncome;
+            document.getElementById('totalExpenseLabel').textContent = lang[currentLang].totalExpense;
+            document.getElementById('remainingLabel').textContent = lang[currentLang].remaining;
+            document.getElementById('addEntryTitle').textContent = lang[currentLang].addEntry;
+            document.getElementById('chartTitle').textContent = lang[currentLang].chartTitle;
+            document.getElementById('logoutBtn').textContent = lang[currentLang].logout;
+            
+            document.getElementById('entryType').innerHTML = `
+                <option value="income">${lang[currentLang].income}</option>
+                <option value="expense">${lang[currentLang].expense}</option>
+            `;
+            document.getElementById('entryAmount').placeholder = lang[currentLang].amount;
+            document.getElementById('entryCategory').placeholder = lang[currentLang].category;
+            document.getElementById('addEntryBtn').textContent = lang[currentLang].addBtn;
+            
+            document.getElementById('tabAll').textContent = lang[currentLang].all;
+            document.getElementById('tabIncome').textContent = lang[currentLang].income;
+            document.getElementById('tabExpense').textContent = lang[currentLang].expense;
+            
+            if (currentUser) updateUI();
+        }
+
+        // Event listeners
+        document.getElementById('goToRegister').addEventListener('click', showRegister);
+        document.getElementById('goToLogin').addEventListener('click', showLogin);
+        document.getElementById('loginBtn').addEventListener('click', login);
+        document.getElementById('registerBtn').addEventListener('click', register);
+        document.getElementById('logoutBtn').addEventListener('click', logout);
+        document.getElementById('langToggle').addEventListener('click', switchLang);
+        document.getElementById('addEntryBtn').addEventListener('click', addEntry);
+        
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                currentFilter = tab.dataset.tab;
+                updateUI();
+            });
+        });
+        
+        // Enter key support
+        document.getElementById('loginPassword').addEventListener('keypress', e => {
+            if (e.key === 'Enter') login();
+        });
+        document.getElementById('registerPassword').addEventListener('keypress', e => {
+            if (e.key === 'Enter') register();
+        });
+    </script>
+</body>
+</html>
