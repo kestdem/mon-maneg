@@ -9,15 +9,22 @@ document.addEventListener('DOMContentLoaded', () => {
     firebase.initializeApp(window.firebaseConfig);
     auth = firebase.auth();
     db = firebase.database();
+
+    let appInitialized = false;
     
     // Check authentication state
     auth.onAuthStateChanged((user) => {
         if (user) {
             currentUser = user;
             showApp();
-            initializeApp();
+            
+            if (!appInitialized){
+                initializeApp();
+                appInitialized = true;
+            }
         } else {
             currentUser = null;
+            appInitialized = false;
             showAuth();
         }
     });
@@ -299,8 +306,6 @@ async function initializeUserDefaults(userId) {
 function initializeApp() {
     loadCurrencies();
     loadTransactions();
-    updateSummary();
-    updateCharts();
 }
 
 // ===================================
@@ -646,30 +651,52 @@ async function deleteTransaction(transactionId) {
 // ===================================
 let allTransactions = [];
 let allCategories = {};
+let transactionsRef = null;
 
 async function loadTransactions() {
     if (!currentUser) return;
-    
-    // Load categories first
-    const categoriesSnapshot = await db.ref(`users/${currentUser.uid}/categories`).once('value');
+
+    // 🔁 Eski listener varsa kapat
+    if (transactionsRef) {
+        transactionsRef.off();
+    }
+
+    // 📂 Kategorileri yükle
+    const categoriesSnapshot = await db
+        .ref(`users/${currentUser.uid}/categories`)
+        .once('value');
+
     allCategories = categoriesSnapshot.val() || { income: {}, expense: {} };
-    
-    // Load currencies
-    const currenciesSnapshot = await db.ref(`users/${currentUser.uid}/currencies`).once('value');
-    const currencies = currenciesSnapshot.val() || { 'TRY': { code: 'TRY', symbol: '₺' } };
-    
-    // Load transactions
-    const transactionsRef = db.ref(`users/${currentUser.uid}/transactions`);
+
+    // 💱 Para birimlerini yükle
+    const currenciesSnapshot = await db
+        .ref(`users/${currentUser.uid}/currencies`)
+        .once('value');
+
+    currencies = currenciesSnapshot.val() || {
+        'TRY': { code: 'TRY', symbol: '₺' }
+    };
+
+    // 📄 İşlemleri realtime dinle
+    transactionsRef = db.ref(`users/${currentUser.uid}/transactions`);
+
     transactionsRef.on('value', (snapshot) => {
         const transactions = snapshot.val() || {};
-        allTransactions = Object.entries(transactions).map(([id, transaction]) => ({
-            id,
-            ...transaction
-        })).sort((a, b) => b.timestamp - a.timestamp);
-        
+
+        allTransactions = Object.entries(transactions)
+            .map(([id, transaction]) => ({
+                id,
+                ...transaction
+            }))
+            .sort((a, b) => b.timestamp - a.timestamp);
+
+        // 🎨 UI güncellemeleri SADECE veri geldikten sonra
         displayTransactions(allTransactions, currencies);
+        updateSummary();
+        updateCharts();
     });
 }
+
 
 function displayTransactions(transactions, currencies) {
     const list = document.getElementById('transactions-list');
