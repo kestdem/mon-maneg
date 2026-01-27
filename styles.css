@@ -927,6 +927,7 @@ body.dark-mode .auth-container {
     font-size: 1.5rem;
     color: var(--text-secondary);
     cursor: pointer;
+    padding-bottom: 12px;
 }
 
 .close-modal:hover {
