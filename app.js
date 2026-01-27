@@ -136,6 +136,7 @@ function initializeUI() {
     document.getElementById('logout-btn')?.addEventListener('click', handleLogout);
     
     // Theme and language toggles
+    document.getElementById('auth-theme-toggle')?.addEventListener('click', toggleTheme);
     document.getElementById('theme-toggle')?.addEventListener('click', toggleTheme);
     document.getElementById('lang-toggle')?.addEventListener('click', toggleLanguage);
     
