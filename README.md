@@ -73,33 +73,7 @@ paraflow/
    - **IMPORTANT**: For production, you'll need to update security rules (see below)
 5. Click "Enable"
 
-### 4. Configure Security Rules
-
-Once your database is created, update the security rules:
-
-1. Go to "Realtime Database" → "Rules" tab
-2. Replace the rules with:
-
-```json
-{
-  "rules": {
-    "users": {
-      "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
-      }
-    }
-  }
-}
-```
-
-These rules ensure:
-- Users can only read/write their own data
-- Authentication is required for all operations
-
-3. Click "Publish"
-
-### 5. Get Firebase Configuration
+### 4. Get Firebase Configuration
 
 1. In Firebase Console, click the gear icon (⚙️) next to "Project Overview"
 2. Click "Project settings"
@@ -108,7 +82,7 @@ These rules ensure:
 5. Register your app with a nickname (e.g., "ParaFlow Web")
 6. Copy the Firebase configuration object
 
-### 6. Add Configuration to Your App
+### 5. Add Configuration to Your App
 
 Open `index.html` and find this section near the bottom:
 
@@ -123,22 +97,6 @@ const firebaseConfig = {
     appId: "YOUR_APP_ID"
 };
 ```
-
-Replace the placeholder values with your actual Firebase configuration values.
-
-**Example:**
-```javascript
-const firebaseConfig = {
-    apiKey: "AIzaSyBx1234567890abcdefghijk",
-    authDomain: "paraflow-12345.firebaseapp.com",
-    databaseURL: "https://paraflow-12345-default-rtdb.firebaseio.com",
-    projectId: "paraflow-12345",
-    storageBucket: "paraflow-12345.appspot.com",
-    messagingSenderId: "123456789012",
-    appId: "1:123456789012:web:abcdef1234567890"
-};
-```
-
 ## GitHub Pages Deployment
 
 ### Option 1: Using GitHub Web Interface
@@ -358,31 +316,6 @@ Users can add custom categories and currencies through the app interface.
 ### Data Not Syncing
 - Check internet connection
 - Verify Firebase Database URL is correct
-- Check browser console for database errors
-
-## Local Development
-
-For local development:
-
-1. Use a local server (Firebase Hosting, http-server, or Python's SimpleHTTPServer)
-   ```bash
-   # Using Python 3
-   python -m http.server 8000
-   
-   # Using Node.js http-server
-   npx http-server
-   ```
-
-2. Open `http://localhost:8000` in your browser
-
-**Note**: Simply opening `index.html` as a file may cause CORS issues with Firebase.
-
-## Performance Tips
-
-1. **Optimize Database Reads**: App uses real-time listeners efficiently
-2. **Lazy Load Charts**: Charts only render when data is available
-3. **Minimize Redraws**: Charts update only when necessary
-4. **Cache Static Assets**: Leverage browser caching for CSS/JS
 
 ## Future Enhancements (Optional)
 
