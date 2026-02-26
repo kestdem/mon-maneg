@@ -2,6 +2,7 @@
 // Firebase Initialization & Config
 // ===================================
 let db, auth, currentUser;
+let userSettings = { monthlyBudget: null, monthlyPeriodStartDay: 1 };
 
 // Initialize Firebase when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
@@ -10,6 +11,11 @@ document.addEventListener('DOMContentLoaded', () => {
     auth = firebase.auth();
     db = firebase.database();
 
+    // Do not persist sessions across browser restarts
+    auth.setPersistence(firebase.auth.Auth.Persistence.NONE).catch((error) => {
+        console.error('Error setting auth persistence:', error);
+    });
+
     let appInitialized = false;
     
     // Check authentication state
@@ -17,14 +23,27 @@ document.addEventListener('DOMContentLoaded', () => {
         if (user) {
             currentUser = user;
             showApp();
+            updateUserUI(user);
             
             if (!appInitialized){
                 initializeApp();
                 appInitialized = true;
             }
+
+            // Eğer e-posta doğrulanmamışsa, sadece bilgilendirici bir uyarı göster
+            if (!user.emailVerified) {
+                showToast(
+                    t(
+                        'Hesabınız aktif, ancak güvenlik için e-posta adresinizi doğrulamanız önerilir.',
+                        'Your account is active, but for security it is recommended to verify your email address.'
+                    ),
+                    'info'
+                );
+            }
         } else {
             currentUser = null;
             appInitialized = false;
+            updateUserUI(null);
             showAuth();
         }
     });
@@ -133,12 +152,23 @@ function initializeUI() {
     // Auth buttons
     document.getElementById('login-btn')?.addEventListener('click', handleLogin);
     document.getElementById('signup-btn')?.addEventListener('click', handleSignup);
+    document.getElementById('forgot-password')?.addEventListener('click', handlePasswordReset);
     document.getElementById('logout-btn')?.addEventListener('click', handleLogout);
     
     // Theme and language toggles
     document.getElementById('auth-theme-toggle')?.addEventListener('click', toggleTheme);
     document.getElementById('theme-toggle')?.addEventListener('click', toggleTheme);
     document.getElementById('lang-toggle')?.addEventListener('click', toggleLanguage);
+
+    // User menu
+    document.getElementById('user-menu-toggle')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleUserMenu();
+    });
+    document.getElementById('user-settings-btn')?.addEventListener('click', () => {
+        closeUserMenu();
+        openSettingsModal();
+    });
     
     // Action buttons
     document.getElementById('add-income-btn')?.addEventListener('click', () => openTransactionModal('income'));
@@ -177,6 +207,9 @@ function initializeUI() {
     // Currency modal
     document.getElementById('save-currency-btn')?.addEventListener('click', handleAddCurrency);
     
+    // Settings modal
+    document.getElementById('save-settings-btn')?.addEventListener('click', handleSaveSettings);
+    
     // Filter buttons
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -189,6 +222,19 @@ function initializeUI() {
     // Date range for daily chart
     document.getElementById('start-date')?.addEventListener('change', updateDailyChart);
     document.getElementById('end-date')?.addEventListener('change', updateDailyChart);
+
+    // Date change also updates category analysis
+    document.getElementById('start-date')?.addEventListener('change', updateCategoryAnalysis);
+    document.getElementById('end-date')?.addEventListener('change', updateCategoryAnalysis);
+
+    // Close user menu when clicking outside
+    document.addEventListener('click', (e) => {
+        const userMenu = document.querySelector('.user-menu');
+        if (!userMenu) return;
+        if (!userMenu.contains(e.target)) {
+            closeUserMenu();
+        }
+    });
     
     // Set default dates (last 7 days)
     const today = new Date();
@@ -214,6 +260,40 @@ function showAuth() {
 function showApp() {
     document.getElementById('auth-container').style.display = 'none';
     document.getElementById('app-container').style.display = 'flex';
+}
+
+function updateUserUI(user) {
+    const avatarEl = document.getElementById('user-avatar');
+    const emailTextEl = document.getElementById('user-email-text');
+    const menuEmailEl = document.getElementById('user-menu-email');
+
+    if (!avatarEl || !emailTextEl || !menuEmailEl) return;
+
+    if (!user) {
+        avatarEl.textContent = 'U';
+        emailTextEl.textContent = '';
+        menuEmailEl.textContent = '';
+        return;
+    }
+
+    const email = user.email || '';
+    const initial = email ? email.charAt(0).toUpperCase() : 'U';
+
+    avatarEl.textContent = initial;
+    emailTextEl.textContent = email;
+    menuEmailEl.textContent = email;
+}
+
+function toggleUserMenu() {
+    const dropdown = document.getElementById('user-menu-dropdown');
+    if (!dropdown) return;
+    dropdown.classList.toggle('open');
+}
+
+function closeUserMenu() {
+    const dropdown = document.getElementById('user-menu-dropdown');
+    if (!dropdown) return;
+    dropdown.classList.remove('open');
 }
 
 async function handleLogin() {
@@ -258,10 +338,62 @@ async function handleSignup() {
         const userCredential = await auth.createUserWithEmailAndPassword(email, password);
         // Initialize default categories and currency
         await initializeUserDefaults(userCredential.user.uid);
-        showToast(t('Hesap oluşturuldu!', 'Account created!'), 'success');
+
+        try {
+            await userCredential.user.sendEmailVerification();
+            showToast(
+                t(
+                    'Hesap oluşturuldu! Lütfen e-posta adresinizi doğrulamak için mailinizi kontrol edin.',
+                    'Account created! Please check your email to verify your address.'
+                ),
+                'success'
+            );
+        } catch (verificationError) {
+            console.error('Email verification error:', verificationError);
+            showToast(
+                t(
+                    'Hesap oluşturuldu ancak doğrulama e-postası gönderilemedi. Lütfen daha sonra tekrar deneyin.',
+                    'Account created, but verification email could not be sent. Please try again later.'
+                ),
+                'error'
+            );
+        }
     } catch (error) {
         console.error('Signup error:', error);
         showToast(t('Kayıt başarısız: ' + error.message, 'Signup failed: ' + error.message), 'error');
+    }
+}
+
+async function handlePasswordReset() {
+    const emailInput = document.getElementById('login-email');
+    const email = emailInput ? emailInput.value.trim() : '';
+
+    if (!email) {
+        showToast(
+            t('Lütfen e-posta adresinizi girin', 'Please enter your email address'),
+            'error'
+        );
+        return;
+    }
+
+    try {
+        await auth.sendPasswordResetEmail(email);
+        showToast(
+            t(
+                'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi',
+                'Password reset link has been sent to your email'
+            ),
+            'success'
+        );
+    } catch (error) {
+        console.error('Password reset error:', error);
+        showToast(
+            t(
+                'Şifre sıfırlama isteği başarısız: ' + error.message,
+                'Password reset request failed: ' + error.message
+            ),
+            'error'
+        );
     }
 }
 
@@ -269,6 +401,7 @@ async function handleLogout() {
     try {
         await auth.signOut();
         showToast(t('Çıkış yapıldı', 'Logged out'), 'success');
+        closeUserMenu();
     } catch (error) {
         console.error('Logout error:', error);
         showToast(t('Çıkış başarısız', 'Logout failed'), 'error');
@@ -301,12 +434,92 @@ async function initializeUserDefaults(userId) {
     await db.ref(`users/${userId}/currencies`).set(defaultCurrencies);
 }
 
+function loadUserSettings() {
+    if (!currentUser) return;
+
+    if (settingsRef) {
+        settingsRef.off();
+    }
+
+    settingsRef = db.ref(`users/${currentUser.uid}/settings`);
+    settingsRef.on('value', (snapshot) => {
+        const settings = snapshot.val() || {};
+        userSettings.monthlyBudget =
+            typeof settings.monthlyBudget === 'number' ? settings.monthlyBudget : null;
+        userSettings.monthlyPeriodStartDay =
+            typeof settings.monthlyPeriodStartDay === 'number' && settings.monthlyPeriodStartDay >= 1 && settings.monthlyPeriodStartDay <= 28
+                ? settings.monthlyPeriodStartDay
+                : 1;
+        updateBudgetUsage();
+    });
+}
+
+function openSettingsModal() {
+    const modal = document.getElementById('settings-modal');
+    if (!modal) return;
+
+    const budgetInput = document.getElementById('monthly-budget-amount');
+    const daySelect = document.getElementById('monthly-period-start-day');
+    if (budgetInput) {
+        budgetInput.value =
+            userSettings.monthlyBudget && userSettings.monthlyBudget > 0
+                ? userSettings.monthlyBudget
+                : '';
+    }
+    if (daySelect) {
+        daySelect.value = String(userSettings.monthlyPeriodStartDay || 1);
+    }
+
+    modal.classList.add('active');
+}
+
+async function handleSaveSettings() {
+    if (!currentUser) return;
+
+    const budgetInput = document.getElementById('monthly-budget-amount');
+    const daySelect = document.getElementById('monthly-period-start-day');
+    if (!budgetInput || !daySelect) return;
+
+    const budgetValue = parseFloat(budgetInput.value);
+    const dayValue = parseInt(daySelect.value, 10);
+
+    if (isNaN(budgetValue) || budgetValue <= 0) {
+        showToast(
+            t('Lütfen geçerli bir bütçe girin', 'Please enter a valid budget amount'),
+            'error'
+        );
+        return;
+    }
+
+    const normalizedDay =
+        !isNaN(dayValue) && dayValue >= 1 && dayValue <= 28 ? dayValue : 1;
+
+    try {
+        await db.ref(`users/${currentUser.uid}/settings`).update({
+            monthlyBudget: budgetValue,
+            monthlyPeriodStartDay: normalizedDay
+        });
+        showToast(
+            t('Ayarlar kaydedildi', 'Settings saved'),
+            'success'
+        );
+        closeAllModals();
+    } catch (error) {
+        console.error('Save settings error:', error);
+        showToast(
+            t('Ayarlar kaydedilemedi', 'Failed to save settings'),
+            'error'
+        );
+    }
+}
+
 // ===================================
 // App Initialization
 // ===================================
 function initializeApp() {
     loadCurrencies();
     loadTransactions();
+    loadUserSettings();
 }
 
 // ===================================
@@ -653,6 +866,7 @@ async function deleteTransaction(transactionId) {
 let allTransactions = [];
 let allCategories = {};
 let transactionsRef = null;
+let settingsRef = null;
 
 async function loadTransactions() {
     if (!currentUser) return;
@@ -808,6 +1022,68 @@ async function updateSummary() {
         `${defaultCurrency.symbol}${totalExpense.toFixed(2)}`;
     document.getElementById('balance').textContent = 
         `${defaultCurrency.symbol}${balance.toFixed(2)}`;
+
+    updateBudgetUsage();
+}
+
+function updateBudgetUsage() {
+    const usageTextEl = document.getElementById('budget-usage-text');
+    const barEl = document.getElementById('budget-progress-bar');
+
+    if (!usageTextEl || !barEl) return;
+
+    if (!currentUser || !userSettings.monthlyBudget) {
+        usageTextEl.textContent = t('Tanımlı değil', 'Not set');
+        barEl.style.width = '0%';
+        barEl.style.backgroundColor = 'var(--primary-500)';
+        return;
+    }
+
+    const budget = userSettings.monthlyBudget;
+    const now = new Date();
+    const startDay = userSettings.monthlyPeriodStartDay || 1;
+
+    // Dönem başlangıç tarihini hesapla
+    let periodStart = new Date(now.getFullYear(), now.getMonth(), startDay);
+    if (now.getDate() < startDay) {
+        // Bir önceki ayın başlangıç gününden itibaren say
+        periodStart = new Date(now.getFullYear(), now.getMonth() - 1, startDay);
+    }
+
+    let periodExpenses = 0;
+    allTransactions.forEach((transaction) => {
+        if (transaction.type !== 'expense') return;
+        if (transaction.currency !== 'TRY') return; // Basitlik için yalnızca TRY
+
+        const date = new Date(transaction.date);
+        if (date >= periodStart && date <= now) {
+            periodExpenses += transaction.amount;
+        }
+    });
+
+    const ratio = budget > 0 ? periodExpenses / budget : 0;
+    const percent = Math.max(0, Math.min(100, ratio * 100));
+
+    // Daha kompakt gösterim için kısaltılmış format
+    const formatter = new Intl.NumberFormat(currentLang === 'tr' ? 'tr-TR' : 'en-US', {
+        notation: 'compact',
+        maximumFractionDigits: 1
+    });
+
+    const spentCompact = formatter.format(periodExpenses);
+    const budgetCompact = formatter.format(budget);
+    const percentText = `${Math.round(ratio * 100)}%`;
+
+    usageTextEl.textContent = `${spentCompact} / ${budgetCompact} • ${percentText}`;
+    barEl.style.width = `${percent}%`;
+
+    if (ratio <= 0.8) {
+        barEl.style.backgroundColor = 'var(--success)';
+    } else if (ratio <= 1) {
+        barEl.style.backgroundColor = 'var(--warning)';
+    } else {
+        barEl.style.backgroundColor = 'var(--error)';
+    }
 }
 
 // ===================================
@@ -815,10 +1091,13 @@ async function updateSummary() {
 // ===================================
 let expenseChart = null;
 let dailyChart = null;
+let monthlyChart = null;
 
 async function updateCharts() {
     updateExpenseChart();
     updateDailyChart();
+    updateMonthlyChart();
+    updateCategoryAnalysis();
 }
 
 function updateExpenseChart() {
@@ -849,8 +1128,9 @@ function updateExpenseChart() {
     }
     
     const isDark = document.body.classList.contains('dark-mode');
-    const textColor = isDark ? '#cbd5e1' : '#0f172a';
-    
+    const textColor = isDark ? '#cbd5e1' : '#000000';
+    const chartFont = { size: 14, weight: '600', family: "'Plus Jakarta Sans', sans-serif" };
+
     expenseChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
@@ -871,6 +1151,7 @@ function updateExpenseChart() {
             }]
         },
         options: {
+            devicePixelRatio: typeof window !== 'undefined' && window.devicePixelRatio ? Math.min(window.devicePixelRatio, 3) : 1,
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
@@ -878,14 +1159,17 @@ function updateExpenseChart() {
                     position: 'bottom',
                     labels: {
                         color: textColor,
-                        padding: 15,
-                        font: {
-                            size: 12,
-                            family: "'Plus Jakarta Sans', sans-serif"
-                        }
+                        padding: 16,
+                        font: chartFont,
+                        usePointStyle: true
                     }
                 },
                 tooltip: {
+                    titleFont: chartFont,
+                    bodyFont: chartFont,
+                    titleColor: textColor,
+                    bodyColor: textColor,
+                    backgroundColor: isDark ? 'rgba(30,41,59,0.95)' : 'rgba(255,255,255,0.98)',
                     callbacks: {
                         label: function(context) {
                             const label = context.label || '';
@@ -945,9 +1229,10 @@ function updateDailyChart() {
     }
     
     const isDark = document.body.classList.contains('dark-mode');
-    const textColor = isDark ? '#cbd5e1' : '#0f172a';
+    const textColor = isDark ? '#cbd5e1' : '#000000';
     const gridColor = isDark ? '#334155' : '#e2e8f0';
-    
+    const tickFont = { size: 13, weight: '600', family: "'Plus Jakarta Sans', sans-serif" };
+
     dailyChart = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -960,6 +1245,7 @@ function updateDailyChart() {
             }]
         },
         options: {
+            devicePixelRatio: typeof window !== 'undefined' && window.devicePixelRatio ? Math.min(window.devicePixelRatio, 3) : 1,
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
@@ -967,6 +1253,11 @@ function updateDailyChart() {
                     display: false
                 },
                 tooltip: {
+                    titleFont: tickFont,
+                    bodyFont: tickFont,
+                    titleColor: textColor,
+                    bodyColor: textColor,
+                    backgroundColor: isDark ? 'rgba(30,41,59,0.95)' : 'rgba(255,255,255,0.98)',
                     callbacks: {
                         label: function(context) {
                             return `₺${context.parsed.y.toFixed(2)}`;
@@ -978,9 +1269,9 @@ function updateDailyChart() {
                 x: {
                     ticks: {
                         color: textColor,
-                        font: {
-                            size: 11
-                        }
+                        font: tickFont,
+                        maxRotation: 45,
+                        minRotation: 0
                     },
                     grid: {
                         display: false
@@ -989,6 +1280,7 @@ function updateDailyChart() {
                 y: {
                     ticks: {
                         color: textColor,
+                        font: tickFont,
                         callback: function(value) {
                             return '₺' + value;
                         }
@@ -1007,6 +1299,194 @@ function formatDateShort(dateString) {
     const day = date.getDate();
     const month = date.getMonth() + 1;
     return `${day}/${month}`;
+}
+
+function formatMonthLabel(date) {
+    const options = { month: 'short', year: 'numeric' };
+    return date.toLocaleDateString(
+        currentLang === 'tr' ? 'tr-TR' : 'en-US',
+        options
+    );
+}
+
+function updateMonthlyChart() {
+    const ctx = document.getElementById('monthly-chart');
+    if (!ctx) return;
+
+    // Son 6 ayı göster
+    const now = new Date();
+    const monthKeys = [];
+    const labels = [];
+
+    for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        monthKeys.push(key);
+        labels.push(formatMonthLabel(d));
+    }
+
+    const incomeData = new Array(monthKeys.length).fill(0);
+    const expenseData = new Array(monthKeys.length).fill(0);
+
+    allTransactions.forEach((transaction) => {
+        if (transaction.currency !== 'TRY') return; // Basitlik için yalnızca TRY
+        if (!transaction.date) return;
+
+        const key = transaction.date.slice(0, 7);
+        const index = monthKeys.indexOf(key);
+        if (index === -1) return;
+
+        if (transaction.type === 'income') {
+            incomeData[index] += transaction.amount;
+        } else if (transaction.type === 'expense') {
+            expenseData[index] += transaction.amount;
+        }
+    });
+
+    if (monthlyChart) {
+        monthlyChart.destroy();
+    }
+
+    const isDark = document.body.classList.contains('dark-mode');
+    const textColor = isDark ? '#cbd5e1' : '#000000';
+    const gridColor = isDark ? '#334155' : '#e2e8f0';
+    const tickFont = { size: 13, weight: '600', family: "'Plus Jakarta Sans', sans-serif" };
+
+    monthlyChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: t('Gelir', 'Income'),
+                    data: incomeData,
+                    backgroundColor: '#22c55e',
+                    borderRadius: 4
+                },
+                {
+                    label: t('Gider', 'Expense'),
+                    data: expenseData,
+                    backgroundColor: '#ef4444',
+                    borderRadius: 4
+                }
+            ]
+        },
+        options: {
+            devicePixelRatio: typeof window !== 'undefined' && window.devicePixelRatio ? Math.min(window.devicePixelRatio, 3) : 1,
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    labels: {
+                        color: textColor,
+                        font: tickFont,
+                        padding: 16,
+                        usePointStyle: true
+                    }
+                },
+                tooltip: {
+                    titleFont: tickFont,
+                    bodyFont: tickFont,
+                    titleColor: textColor,
+                    bodyColor: textColor,
+                    backgroundColor: isDark ? 'rgba(30,41,59,0.95)' : 'rgba(255,255,255,0.98)',
+                    callbacks: {
+                        label: function(context) {
+                            return `₺${context.parsed.y.toFixed(2)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        color: textColor,
+                        font: tickFont
+                    },
+                    grid: {
+                        display: false
+                    }
+                },
+                y: {
+                    ticks: {
+                        color: textColor,
+                        font: tickFont,
+                        callback: function(value) {
+                            return '₺' + value;
+                        }
+                    },
+                    grid: {
+                        color: gridColor
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateCategoryAnalysis() {
+    const container = document.getElementById('top-categories-list');
+    if (!container) return;
+
+    if (allTransactions.length === 0) {
+        container.innerHTML = `<div class="empty-state"><p>${t('Henüz veri yok', 'No data yet')}</p></div>`;
+        return;
+    }
+
+    const startDateVal = document.getElementById('start-date')?.value;
+    const endDateVal = document.getElementById('end-date')?.value;
+
+    let start = null;
+    let end = null;
+
+    if (startDateVal && endDateVal) {
+        start = new Date(startDateVal);
+        end = new Date(endDateVal);
+    }
+
+    const totalsByCategory = {};
+
+    allTransactions.forEach((transaction) => {
+        if (transaction.type !== 'expense') return;
+        if (transaction.currency !== 'TRY') return; // Basitlik için yalnızca TRY
+
+        if (start && end) {
+            const transactionDate = new Date(transaction.date);
+            if (transactionDate < start || transactionDate > end) {
+                return;
+            }
+        }
+
+        const category = allCategories.expense?.[transaction.categoryKey];
+        const categoryName = currentLang === 'tr'
+            ? (category?.name || transaction.categoryKey)
+            : (category?.nameEn || category?.name || transaction.categoryKey);
+
+        if (!totalsByCategory[categoryName]) {
+            totalsByCategory[categoryName] = 0;
+        }
+        totalsByCategory[categoryName] += transaction.amount;
+    });
+
+    const entries = Object.entries(totalsByCategory)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+    if (entries.length === 0) {
+        container.innerHTML = `<div class="empty-state"><p>${t('Seçilen aralıkta gider yok', 'No expenses in selected range')}</p></div>`;
+        return;
+    }
+
+    container.innerHTML = '';
+    entries.forEach(([name, total]) => {
+        const item = document.createElement('div');
+        item.className = 'top-category-item';
+        item.innerHTML = `
+            <div class="top-category-name">${name}</div>
+            <div class="top-category-amount">₺${total.toFixed(2)}</div>
+        `;
+        container.appendChild(item);
+    });
 }
 
 // ===================================
